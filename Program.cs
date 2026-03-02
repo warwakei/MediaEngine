@@ -2,10 +2,15 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Drawing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
+// Enable Windows Forms
+Application.EnableVisualStyles();
 
 // Check for command line arguments
 bool isInstalled = args.Length > 0 && (args[0] == "-i" || args[0] == "--installed");
@@ -16,7 +21,7 @@ if (isInstalled)
     string markerFile = Path.Combine(AppContext.BaseDirectory, "installed.iww");
     File.WriteAllText(markerFile, "");
     
-    // Run in background/tray mode
+    // Run in tray mode
     RunInTray();
 }
 else
@@ -130,51 +135,87 @@ void CreateStartupShortcut(string exePath)
 
 void RunInTray()
 {
-    // Run the web service
-    var builder = WebApplication.CreateBuilder(args);
+    // Hide console window
+    var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+    ShowWindow(handle, 0); // SW_HIDE
     
-    builder.Logging.ClearProviders();
-    builder.Services.AddSingleton<MediaEngineService>();
-    builder.Services.AddCors(options =>
-    {
-        options.AddPolicy("AllowAll", policy =>
-        {
-            policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-        });
+    // Create tray icon
+    NotifyIcon trayIcon = new NotifyIcon();
+    trayIcon.Icon = SystemIcons.Application;
+    trayIcon.Text = "MediaEngine";
+    trayIcon.Visible = true;
+    
+    // Create context menu
+    ContextMenuStrip menu = new ContextMenuStrip();
+    menu.Items.Add("Exit", null, (s, e) => {
+        trayIcon.Visible = false;
+        Application.Exit();
     });
+    trayIcon.ContextMenuStrip = menu;
     
-    var app = builder.Build();
-    app.UseCors("AllowAll");
+    // Start web service in background
+    Task.Run(() => StartWebService());
     
-    var service = app.Services.GetRequiredService<MediaEngineService>();
-    _ = service.StartListeningAsync();
-    
-    app.MapGet("/api/track", async () =>
-    {
-        var track = await service.GetCurrentTrackAsync();
-        return Results.Json(track);
-    });
-    
-    app.MapPost("/api/delay", (HttpContext context) =>
-    {
-        var query = context.Request.Query;
-        if (!int.TryParse(query["delayMs"], out int delayMs))
-            return Results.Json(new { error = "Invalid delayMs parameter" });
-        
-        if (delayMs < 100 || delayMs > 60000)
-            return Results.Json(new { error = "Delay must be between 100 and 60000 ms" });
-        
-        service.SetDelay(delayMs);
-        return Results.Json(new { message = $"Delay set to {delayMs}ms" });
-    });
-    
-    app.MapGet("/api/status", () =>
-    {
-        return Results.Json(new { version = "0.01", status = "running" });
-    });
-    
-    app.Run("http://localhost:5000");
+    // Keep application running
+    Application.Run();
 }
+
+void StartWebService()
+{
+    try
+    {
+        var builder = WebApplication.CreateBuilder(new string[] { });
+        
+        builder.Logging.ClearProviders();
+        builder.Services.AddSingleton<MediaEngineService>();
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll", policy =>
+            {
+                policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+            });
+        });
+        
+        var app = builder.Build();
+        app.UseCors("AllowAll");
+        
+        var service = app.Services.GetRequiredService<MediaEngineService>();
+        _ = service.StartListeningAsync();
+        
+        app.MapGet("/api/track", async () =>
+        {
+            var track = await service.GetCurrentTrackAsync();
+            return Results.Json(track);
+        });
+        
+        app.MapPost("/api/delay", (HttpContext context) =>
+        {
+            var query = context.Request.Query;
+            if (!int.TryParse(query["delayMs"], out int delayMs))
+                return Results.Json(new { error = "Invalid delayMs parameter" });
+            
+            if (delayMs < 100 || delayMs > 60000)
+                return Results.Json(new { error = "Delay must be between 100 and 60000 ms" });
+            
+            service.SetDelay(delayMs);
+            return Results.Json(new { message = $"Delay set to {delayMs}ms" });
+        });
+        
+        app.MapGet("/api/status", () =>
+        {
+            return Results.Json(new { version = "0.01", status = "running" });
+        });
+        
+        app.Run("http://localhost:5000");
+    }
+    catch (Exception ex)
+    {
+        // Silently fail
+    }
+}
+
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
 public class MediaEngineService
 {
