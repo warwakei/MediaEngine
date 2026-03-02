@@ -2,6 +2,10 @@
 
 This is media utility for warwakei projects allowing to check current media playing on PC. As youtube videos, spotify in browser, etc. Just using something as windows media session API but without WinRT (i hate WinRT).
 
+## Used In
+
+- [SimpleChatbox](https://github.com/warwakei/SimpleChatbox) - VRChat chatbox utility for displaying currently playing media
+
 ## Features
 
 - Get current track information (title, artist, display name)
