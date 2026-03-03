@@ -2,15 +2,12 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
-// Enable Windows Forms
-Application.EnableVisualStyles();
 
 // Check for command line arguments
 bool isInstalled = args.Length > 0 && (args[0] == "-i" || args[0] == "--installed");
@@ -139,25 +136,11 @@ void RunInTray()
     var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
     ShowWindow(handle, 0); // SW_HIDE
     
-    // Create tray icon
-    NotifyIcon trayIcon = new NotifyIcon();
-    trayIcon.Icon = SystemIcons.Application;
-    trayIcon.Text = "MediaEngine";
-    trayIcon.Visible = true;
-    
-    // Create context menu
-    ContextMenuStrip menu = new ContextMenuStrip();
-    menu.Items.Add("Exit", null, (s, e) => {
-        trayIcon.Visible = false;
-        Application.Exit();
-    });
-    trayIcon.ContextMenuStrip = menu;
-    
     // Start web service in background
     Task.Run(() => StartWebService());
     
     // Keep application running
-    Application.Run();
+    System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
 }
 
 void StartWebService()
@@ -208,13 +191,13 @@ void StartWebService()
         
         app.Run("http://localhost:5000");
     }
-    catch (Exception ex)
+    catch
     {
         // Silently fail
     }
 }
 
-[System.Runtime.InteropServices.DllImport("user32.dll")]
+[DllImport("user32.dll")]
 static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
 public class MediaEngineService
